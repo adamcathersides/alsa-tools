@@ -24,7 +24,8 @@
 
 #pragma implementation
 #include "HDSPMixerWindow.h"
-    
+#include "HDSPMixerMidi.h"    
+
 /* header used in .mix file */
 const char header[] = "HDSPMixer v1";
 
@@ -205,6 +206,12 @@ static void about_cb(Fl_Widget *widget, void *arg)
     w->about->show();
 }
 
+// static void midi_enable_cb(Fl_Widget *widget, void *arg)
+// {
+//     HDSPMixerWindow *w = (HDSPMixerWindow *)arg;
+    // MIDI enable/disable logic can be added here
+// }
+ 
 static void open_cb(Fl_Widget *widget, void *arg)
 {
     HDSPMixerWindow *w = (HDSPMixerWindow *)arg;
@@ -333,6 +340,18 @@ static int handler_cb(int event)
 	return 0;
     }
     return 0;
+}
+
+static void midi_enable_cb(Fl_Widget *w, void *arg) {
+    HDSPMixerWindow *win = (HDSPMixerWindow *)arg;
+    // Enable/disable MIDI
+}
+
+static void midi_clear_cb(Fl_Widget *w, void *arg) {
+    HDSPMixerWindow *win = (HDSPMixerWindow *)arg;
+    if (win->midi_controller) {
+        win->midi_controller->clear_all_mappings();
+    }
 }
 
 void HDSPMixerWindow::save() 
@@ -993,17 +1012,47 @@ HDSPMixerWindow::HDSPMixerWindow(int x, int y, int w, int h, const char *label, 
     menubar->add("&View/Submix", 's', (Fl_Callback *)submix_cb, (void *)this, FL_MENU_TOGGLE|FL_MENU_VALUE);
     menubar->add("&Options/Level Meter Setup", 'm', (Fl_Callback *)setup_cb, (void *)this);
     menubar->add("&?/About", 0, (Fl_Callback *)about_cb, (void *)this);
+
+    menubar->add("&Options/MIDI Controller/Enable", 'm',
+                (Fl_Callback *)midi_enable_cb, (void *)this,
+                FL_MENU_TOGGLE);
+    menubar->add("&Options/MIDI Controller/Clear Mappings", 0,
+                  (Fl_Callback *)midi_clear_cb, (void *)this);
+
     inputs = new HDSPMixerInputs(0, MENU_HEIGHT, w, FULLSTRIP_HEIGHT, cards[0]->channels_input);
     inputs->buttons->input = 1;
     inputs->buttons->output = 1;
     inputs->buttons->submix = 1;
     inputs->buttons->playback = 1;
     playbacks = new HDSPMixerPlaybacks(0, MENU_HEIGHT+FULLSTRIP_HEIGHT, w, FULLSTRIP_HEIGHT, cards[0]->channels_playback);
+
     outputs = new HDSPMixerOutputs(0, MENU_HEIGHT+FULLSTRIP_HEIGHT*2, w, SMALLSTRIP_HEIGHT, cards[0]->channels_output);
     scroll->end();
     end();
     setup = new HDSPMixerSetup(400, 260, "Level Meters Setup", this);
     about = new HDSPMixerAbout(360, 300, "About HDSPMixer", this);
+    // Initialize MIDI controller
+    midi_controller = new HDSPMixerMidi(this);
+    if (!midi_controller->initialize()) {
+        fprintf(stderr, "Warning: MIDI controller initialization failed\n");
+        fprintf(stderr, "MIDI control will not be available\n");
+        delete midi_controller;
+        midi_controller = NULL;
+    }
+  
+    midi_controller = new HDSPMixerMidi(this);
+    if (!midi_controller->initialize()) {
+        fprintf(stderr, "Warning: MIDI initialization failed\n");
+        delete midi_controller;
+        midi_controller = NULL;
+    }
+
+    HDSPMixerWindow::~HDSPMixerWindow(); {
+        if (midi_controller) {
+            delete midi_controller;
+        }
+    }
+
     i = 0;
     while (i < MAX_CARDS && cards[i] != NULL) {
 	cards[i++]->initializeCard(this);
@@ -1031,6 +1080,15 @@ HDSPMixerWindow::HDSPMixerWindow(int x, int y, int w, int h, const char *label, 
       inputs->buttons->cardselector->ActivateCard (i++);
     }
 }
+
+HDSPMixerWindow::~HDSPMixerWindow()
+{
+    if (midi_controller) {
+        delete midi_controller;
+        midi_controller = NULL;
+    }
+}
+
 
 int HDSPMixerWindow::handle(int e) 
 {

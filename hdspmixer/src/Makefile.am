@@ -59,5 +59,10 @@ hdspmixer_SOURCES = \
 	pixmaps.h \
 	defines.h \
 	channelmap.cxx \
-	channelmap.h
-	
+	channelmap.h \
+	HDSPMixerMidi.h \
+	HDSPMixerMidi.cxx \
+	HDSPMixerMidiButton.h \
+	HDSPMixerMidiButton.cxx
+
+

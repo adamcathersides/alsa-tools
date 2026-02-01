@@ -56,6 +56,7 @@ class HDSPMixerPresetData;
 class HDSPMixerSetup;
 class HDSPMixerAbout;
 class HDSPMixerCard;
+class HDSPMixerMidi;
 
 class HDSPMixerWindow:public Fl_Double_Window 
 {
@@ -70,6 +71,7 @@ public:
     char *file_name;
     Fl_Preferences *prefs;
     Fl_Menu_Bar *menubar;
+    HDSPMixerMidi *midi_controller;
     Fl_Scroll *scroll;
     HDSPMixerSetup *setup;
     HDSPMixerAbout *about;
@@ -97,6 +99,8 @@ public:
     void setTitleWithFilename();
     void stashPreset();
     void unstashPreset();
+    void clear_all_mappings();
+    virtual ~HDSPMixerWindow();
 };
 
 #endif
