@@ -1040,18 +1040,18 @@ HDSPMixerWindow::HDSPMixerWindow(int x, int y, int w, int h, const char *label, 
         midi_controller = NULL;
     }
   
-    midi_controller = new HDSPMixerMidi(this);
-    if (!midi_controller->initialize()) {
-        fprintf(stderr, "Warning: MIDI initialization failed\n");
-        delete midi_controller;
-        midi_controller = NULL;
-    }
+    // midi_controller = new HDSPMixerMidi(this);
+    // if (!midi_controller->initialize()) {
+    //     fprintf(stderr, "Warning: MIDI initialization failed\n");
+    //     delete midi_controller;
+    //     midi_controller = NULL;
+    // }
 
-    HDSPMixerWindow::~HDSPMixerWindow(); {
-        if (midi_controller) {
-            delete midi_controller;
-        }
-    }
+    // HDSPMixerWindow::~HDSPMixerWindow(); {
+    //     if (midi_controller) {
+    //         delete midi_controller;
+    //     }
+    // }
 
     i = 0;
     while (i < MAX_CARDS && cards[i] != NULL) {
