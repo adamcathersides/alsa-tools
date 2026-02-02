@@ -19,9 +19,11 @@
 
 #include <alsa/asoundlib.h>
 #include <pthread.h>
+#include <poll.h>
 #include <map>
 #include <string>
 #include <vector>
+#include <FL/Fl.H>
 
 #define MAX_MIDI_FADERS 128  // Maximum number of fader CC mappings
 
@@ -33,8 +35,8 @@ class HDSPMixerFader;
 struct MidiCCMapping {
     int cc_number;           // MIDI CC number (0-127)
     int channel;             // MIDI channel (0-15, -1 for omni)
-    HDSPMixerFader *fader;   // Pointer to the fader
-    int strip_index;         // Strip index
+    HDSPMixerFader *fader;   // Pointer to the fader (may be NULL if loaded from config)
+    int strip_index;         // Strip index (0-based)
     int dest_index;          // Destination index
     bool is_input;           // true for input, false for playback
 };
@@ -48,7 +50,7 @@ private:
     bool running;
     bool learn_mode;
     
-    // CC number to mapping
+    // CC number to mapping (key = channel * 128 + cc)
     std::map<int, MidiCCMapping> cc_mappings;
     
     // Learning state
@@ -57,10 +59,17 @@ private:
     int learn_target_dest;
     bool learn_target_is_input;
     
+    // Callback for learn completion
+    Fl_Awake_Handler learn_callback;
+    void *learn_callback_data;
+    
     // MIDI thread
     static void *midi_thread_func(void *arg);
     void process_midi_events();
     void handle_midi_cc(int channel, int cc, int value);
+    
+    // Resolve fader pointer from strip/dest indices
+    HDSPMixerFader* resolve_fader(int strip_idx, int dest_idx, bool is_input);
     
     // Configuration file handling
     std::string config_file_path;
@@ -83,6 +92,9 @@ public:
     void set_learn_target(HDSPMixerFader *fader, int strip_idx, int dest_idx, bool is_input);
     void clear_learn_target();
     
+    // Set callback for when learning completes
+    void set_learn_callback(Fl_Awake_Handler cb, void *data);
+    
     // Manual mapping
     void add_mapping(int cc_number, int channel, HDSPMixerFader *fader, 
                     int strip_idx, int dest_idx, bool is_input);
@@ -97,14 +109,17 @@ public:
     static std::vector<std::string> get_midi_ports();
     
     // Configuration
-    void set_midi_port(const std::string &port_name);
     std::string get_config_path() const { return config_file_path; }
+    
+    // Get sequencer info for connection instructions
+    int get_client_id() const { return seq_handle ? snd_seq_client_id(seq_handle) : -1; }
+    int get_port_id() const { return seq_port; }
 };
 
 // Helper function to convert MIDI value (0-127) to fader position
-int midi_value_to_fader_pos(int midi_value, int max_pos);
+int midi_value_to_fader_pos(int midi_value);
 
 // Helper function to convert fader position to MIDI value (0-127)
-int fader_pos_to_midi_value(int fader_pos, int max_pos);
+int fader_pos_to_midi_value(int fader_pos);
 
 #endif // HDSPMIXER_MIDI_H

@@ -47,13 +47,14 @@ class HDSPMixerPeak;
 class HDSPMixerMuteSolo;
 class HDSPMixerStripData;
 class HDSPMixerMeter;
+class HDSPMixerMidiButton;
 
 class HDSPMixerIOMixer:public Fl_Group
 {
 private:
     char const **p_iomixer_xpm;
     int channel_num, relative_num, mixer_type;
-	std::stringstream channel_name;
+    std::stringstream channel_name;
     void update_child(Fl_Widget &widget);
 public:
     HDSPMixerStripData *data[MAX_CARDS][3][NUM_PRESETS]; /* data[card][mode(ss/ds/qs)][preset number] */
@@ -64,12 +65,13 @@ public:
     HDSPMixerMuteSolo *mutesolo;
     HDSPMixerSelector *targets;
     HDSPMixerMeter *meter;
+    HDSPMixerMidiButton *midi_btn;  // MIDI learn button
     HDSPMixerIOMixer(int x, int y, int w, int h, int channelnum, int type);
     void draw();
     void draw_background();
     void draw_background(int x, int y, int w, int h);
     void register_relatives();
+    void update_midi_button_dest(int new_dest);  // Update MIDI button when dest changes
 };
 
 #endif
-

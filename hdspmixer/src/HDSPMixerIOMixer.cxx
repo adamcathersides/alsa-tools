@@ -20,6 +20,7 @@
 
 #pragma implementation
 #include "HDSPMixerIOMixer.h"
+#include "HDSPMixerMidiButton.h"
 
 HDSPMixerIOMixer::HDSPMixerIOMixer(int x, int y, int w, int h, int ch, int type):Fl_Group(x, y, w, h)
 {
@@ -48,9 +49,16 @@ HDSPMixerIOMixer::HDSPMixerIOMixer(int x, int y, int w, int h, int ch, int type)
     gain = new HDSPMixerGain(x+3, y+207, 1);
     peak = new HDSPMixerPeak(x+3, y+36, 1);
     fader = new HDSPMixerFader(x+4, y+51, 32768.0, channel_num, type);
-    pan = new HDSPMixerPan(x+3, y+19, channel_num, type) ;
+    pan = new HDSPMixerPan(x+3, y+19, channel_num, type);
     targets = new HDSPMixerSelector(x+3, y+240, 29, 10);
     meter = new HDSPMixerMeter(x+20, y+59, true, peak);
+    
+    // Create MIDI learn button - positioned below the gain display
+    // channel_num is 1-based, so strip_index for MIDI is channel_num-1
+    midi_btn = new HDSPMixerMidiButton(x+3, y+220, 12, 10, "M");
+    midi_btn->set_target(fader, channel_num-1, 0, (type == 0));
+    midi_btn->tooltip("Click to learn MIDI CC");
+    
     end();
 }
 
@@ -96,3 +104,10 @@ void HDSPMixerIOMixer::update_child(Fl_Widget& widget)
     }
 }
 
+void HDSPMixerIOMixer::update_midi_button_dest(int new_dest)
+{
+    // Update the MIDI button's destination when it changes
+    if (midi_btn) {
+        midi_btn->set_target(fader, channel_num-1, new_dest, (mixer_type == 0));
+    }
+}

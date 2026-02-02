@@ -26,22 +26,31 @@ private:
     int dest_index;
     bool is_input;
     bool learning;
+    bool blink_state;
     
-    static void button_cb(Fl_Widget *widget, void *data);
     static void blink_cb(void *data);
     
-public:
-    HDSPMixerMidiButton(int x, int y, int w, int h, const char *label = "MIDI");
+    // Get the mixer window (lazy initialization)
+    HDSPMixerWindow* get_mixer_window();
     
+public:
+    HDSPMixerMidiButton(int x, int y, int w, int h, const char *label = "M");
+    
+    // Explicitly set the mixer window (optional, can be auto-detected)
     void set_mixer_window(HDSPMixerWindow *win) { mixer_window = win; }
+    
+    // Set the target fader for MIDI control
     void set_target(HDSPMixerFader *fader, int strip_idx, int dest_idx, bool input);
     
     void start_learning();
     void stop_learning();
     bool is_learning() const { return learning; }
     
-    void draw();
-    int handle(int event);
+    // Called when MIDI learn completes
+    void on_learn_complete();
+    
+    void draw() override;
+    int handle(int event) override;
 };
 
 #endif // HDSPMIXER_MIDI_BUTTON_H

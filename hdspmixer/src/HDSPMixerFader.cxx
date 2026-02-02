@@ -19,7 +19,6 @@
 
 #pragma implementation
 #include "HDSPMixerFader.h"
-#include "HDSPMixerMidiButton.h" 
 
 HDSPMixerFader::HDSPMixerFader(int x, int y, double r, int id, int src):Fl_Widget(x, y, 13, 153)
 {
@@ -34,9 +33,7 @@ HDSPMixerFader::HDSPMixerFader(int x, int y, double r, int id, int src):Fl_Widge
     for (int i = 0; i < HDSP_MAX_DEST; i++) {
 	pos[i] = 0;
     }
-    midi_learn_btn = new HDSPMixerMidiButton(x, y + 200, 30, 15, "L");
-    midi_learn_btn->set_target(this, index, dest, false);
-    midi_learn_btn->tooltip("Click to learn MIDI CC for this fader");
+    // Note: MIDI button is now created in HDSPMixerIOMixer, not here
 }
 
 void HDSPMixerFader::draw()
@@ -181,3 +178,12 @@ void HDSPMixerFader::sendGain()
     gain->setText(buf);
 }
 
+int HDSPMixerFader::getIndex() const
+{
+    return index;
+}
+
+int HDSPMixerFader::getSource() const
+{
+    return source;
+}

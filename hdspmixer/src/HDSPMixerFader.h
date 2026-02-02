@@ -31,7 +31,6 @@
 #include "HDSPMixerOutput.h"
 #include "pixmaps.h"
 #include "defines.h"
-#include "HDSPMixerMidiButton.h"
 
 class HDSPMixerIOMixer;
 class HDSPMixerOutput;
@@ -59,8 +58,10 @@ public:
     int handle(int e);
     void draw();
     void sendGain();
-    HDSPMixerMidiButton *midi_learn_btn;
+    
+    // Accessors for MIDI support
+    int getIndex() const;
+    int getSource() const;
 };
 
 #endif
-

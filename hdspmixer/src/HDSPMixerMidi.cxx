@@ -13,11 +13,16 @@
 #include "HDSPMixerMidi.h"
 #include "HDSPMixerWindow.h"
 #include "HDSPMixerFader.h"
+#include "HDSPMixerIOMixer.h"
+#include "HDSPMixerInputs.h"
+#include "HDSPMixerPlaybacks.h"
+#include "defines.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <fstream>
 #include <sstream>
+#include <FL/Fl.H>
 #include <FL/fl_ask.H>
 
 HDSPMixerMidi::HDSPMixerMidi(HDSPMixerWindow *win)
@@ -49,8 +54,8 @@ bool HDSPMixerMidi::initialize()
 {
     int err;
     
-    // Open ALSA sequencer
-    err = snd_seq_open(&seq_handle, "default", SND_SEQ_OPEN_INPUT, 0);
+    // Open ALSA sequencer in NON-BLOCKING mode
+    err = snd_seq_open(&seq_handle, "default", SND_SEQ_OPEN_INPUT, SND_SEQ_NONBLOCK);
     if (err < 0) {
         fprintf(stderr, "Error opening ALSA sequencer for MIDI: %s\n", snd_strerror(err));
         return false;
@@ -72,6 +77,8 @@ bool HDSPMixerMidi::initialize()
     }
     
     printf("MIDI Controller initialized on port %d\n", seq_port);
+    printf("Connect your MIDI controller using: aconnect <controller_port> %d:%d\n",
+           snd_seq_client_id(seq_handle), seq_port);
     
     // Load saved mappings
     load_mappings();
@@ -114,57 +121,73 @@ void *HDSPMixerMidi::midi_thread_func(void *arg)
 void HDSPMixerMidi::process_midi_events()
 {
     snd_seq_event_t *ev;
+    int err;
+    
+    // Set up poll descriptors for waiting on MIDI events
+    int npfds = snd_seq_poll_descriptors_count(seq_handle, POLLIN);
+    struct pollfd *pfds = (struct pollfd *)alloca(sizeof(struct pollfd) * npfds);
+    snd_seq_poll_descriptors(seq_handle, pfds, npfds, POLLIN);
     
     while (running) {
-        // Poll for events with timeout
-        snd_seq_event_input(seq_handle, &ev);
-        
-        if (ev == NULL) {
-            usleep(1000); // 1ms sleep to prevent busy-waiting
-            continue;
-        }
-        
-        // Handle different MIDI event types
-        switch (ev->type) {
-            case SND_SEQ_EVENT_CONTROLLER:
-                handle_midi_cc(ev->data.control.channel,
-                             ev->data.control.param,
-                             ev->data.control.value);
-                break;
+        // Poll with timeout (100ms) so we can check the running flag
+        if (poll(pfds, npfds, 100) > 0) {
+            while ((err = snd_seq_event_input(seq_handle, &ev)) >= 0) {
+                if (ev == NULL) {
+                    continue;
+                }
                 
-            default:
-                // Ignore other event types
-                break;
+                // Handle different MIDI event types
+                switch (ev->type) {
+                    case SND_SEQ_EVENT_CONTROLLER:
+                        handle_midi_cc(ev->data.control.channel,
+                                     ev->data.control.param,
+                                     ev->data.control.value);
+                        break;
+                        
+                    default:
+                        // Ignore other event types
+                        break;
+                }
+            }
         }
-        
-        snd_seq_free_event(ev);
     }
 }
 
 void HDSPMixerMidi::handle_midi_cc(int channel, int cc, int value)
 {
+    printf("MIDI CC received: channel=%d cc=%d value=%d learn_mode=%d\n", 
+           channel, cc, value, learn_mode);
+    
     // Create key for lookup (channel * 128 + cc)
     int key = channel * 128 + cc;
     
     if (learn_mode && learn_target_fader) {
         // We're in learn mode - assign this CC to the target fader
-        printf("Learning: CC %d on channel %d assigned to fader\n", cc, channel);
+        printf("Learning: CC %d on channel %d assigned to fader (strip=%d, dest=%d, is_input=%d)\n", 
+               cc, channel, learn_target_strip, learn_target_dest, learn_target_is_input);
         
         add_mapping(cc, channel, learn_target_fader,
                    learn_target_strip, learn_target_dest,
                    learn_target_is_input);
         
         // Auto-disable learn mode after successful learn
-        set_learn_mode(false);
-        clear_learn_target();
-        
-        // Visual feedback
-        Fl::awake([](void*){
-            fl_message("MIDI CC learned successfully!");
-        }, nullptr);
+        learn_mode = false;
         
         // Save the new mapping
         save_mappings();
+        
+        // Notify UI on main thread
+        Fl::lock();
+        if (learn_callback) {
+            Fl::awake(learn_callback, learn_callback_data);
+        }
+        Fl::unlock();
+        
+        // Clear target
+        learn_target_fader = NULL;
+        learn_target_strip = -1;
+        learn_target_dest = -1;
+        learn_target_is_input = false;
         
         return;
     }
@@ -172,25 +195,55 @@ void HDSPMixerMidi::handle_midi_cc(int channel, int cc, int value)
     // Check if we have a mapping for this CC
     auto it = cc_mappings.find(key);
     if (it != cc_mappings.end()) {
-        const MidiCCMapping &mapping = it->second;
+        MidiCCMapping &mapping = it->second;
+        
+        // Resolve fader pointer if needed (was loaded from config)
+        if (mapping.fader == NULL && window) {
+            mapping.fader = resolve_fader(mapping.strip_index, 
+                                          mapping.dest_index, 
+                                          mapping.is_input);
+        }
         
         if (mapping.fader) {
             // Convert MIDI value (0-127) to fader position
-            // Faders typically use a larger range
-            int fader_pos = midi_value_to_fader_pos(value, 
-                mapping.fader->ndb);
+            int fader_pos = midi_value_to_fader_pos(value);
             
-            // Update the fader position
-            mapping.fader->pos[mapping.dest_index] = fader_pos;
+            printf("Setting fader: strip=%d dest=%d pos=%d\n", 
+                   mapping.strip_index, mapping.dest_index, fader_pos);
             
-            // Trigger fader update on main thread
+            // Update the fader position on the main thread
             Fl::lock();
-            mapping.fader->damage(FL_DAMAGE_ALL);
+            mapping.fader->pos[mapping.dest_index] = fader_pos;
+            mapping.fader->redraw();
             mapping.fader->sendGain();
+            
+            // Also update the mixer
+            if (window) {
+                window->setMixer(mapping.strip_index + 1, 
+                               mapping.is_input ? 0 : 1, 
+                               mapping.dest_index);
+                window->checkState();
+            }
             Fl::unlock();
             Fl::awake();
         }
     }
+}
+
+HDSPMixerFader* HDSPMixerMidi::resolve_fader(int strip_idx, int dest_idx, bool is_input)
+{
+    if (!window) return NULL;
+    
+    if (is_input) {
+        if (strip_idx >= 0 && strip_idx < HDSP_MAX_CHANNELS) {
+            return window->inputs->strips[strip_idx]->fader;
+        }
+    } else {
+        if (strip_idx >= 0 && strip_idx < HDSP_MAX_CHANNELS) {
+            return window->playbacks->strips[strip_idx]->fader;
+        }
+    }
+    return NULL;
 }
 
 void HDSPMixerMidi::set_learn_mode(bool enabled)
@@ -217,6 +270,12 @@ void HDSPMixerMidi::clear_learn_target()
     learn_target_strip = -1;
     learn_target_dest = -1;
     learn_target_is_input = false;
+}
+
+void HDSPMixerMidi::set_learn_callback(Fl_Awake_Handler cb, void *data)
+{
+    learn_callback = cb;
+    learn_callback_data = data;
 }
 
 void HDSPMixerMidi::add_mapping(int cc_number, int channel, HDSPMixerFader *fader,
@@ -249,6 +308,7 @@ void HDSPMixerMidi::clear_all_mappings()
 {
     cc_mappings.clear();
     save_mappings();
+    printf("All MIDI mappings cleared\n");
 }
 
 bool HDSPMixerMidi::has_mapping(int cc_number, int channel) const
@@ -266,6 +326,7 @@ MidiCCMapping HDSPMixerMidi::get_mapping(int cc_number, int channel) const
     }
     MidiCCMapping empty;
     empty.cc_number = -1;
+    empty.fader = NULL;
     return empty;
 }
 
@@ -298,7 +359,8 @@ void HDSPMixerMidi::load_mappings()
 {
     std::ifstream file(config_file_path.c_str());
     if (!file.is_open()) {
-        printf("No MIDI config file found (this is normal on first run)\n");
+        printf("No MIDI config file found at %s (this is normal on first run)\n",
+               config_file_path.c_str());
         return;
     }
     
@@ -322,9 +384,7 @@ void HDSPMixerMidi::load_mappings()
             continue;
         }
         
-        // We can't restore the fader pointer from config, but we'll store
-        // the mapping info and resolve it when needed
-        // For now, just store the metadata
+        // Store the mapping info - fader pointer will be resolved on first use
         MidiCCMapping mapping;
         mapping.cc_number = cc;
         mapping.channel = channel;
@@ -369,7 +429,9 @@ std::vector<std::string> HDSPMixerMidi::get_midi_ports()
                 (caps & SND_SEQ_PORT_CAP_SUBS_READ)) {
                 
                 char port_name[256];
-                snprintf(port_name, sizeof(port_name), "%s:%s",
+                snprintf(port_name, sizeof(port_name), "%d:%d %s:%s",
+                        client,
+                        snd_seq_port_info_get_port(pinfo),
                         snd_seq_client_info_get_name(cinfo),
                         snd_seq_port_info_get_name(pinfo));
                 ports.push_back(std::string(port_name));
@@ -382,17 +444,19 @@ std::vector<std::string> HDSPMixerMidi::get_midi_ports()
 }
 
 // Helper functions
-int midi_value_to_fader_pos(int midi_value, int max_pos)
+int midi_value_to_fader_pos(int midi_value)
 {
     // MIDI CC values are 0-127
-    // Map to fader position (typically 0 to max_pos)
-    // Using floating point for accuracy
-    return (int)((double)midi_value / 127.0 * max_pos);
+    // Fader position range is 0 to 137*CF (where CF=8)
+    // 137*CF = 1096 is the maximum (full volume)
+    return (int)((double)midi_value / 127.0 * 137.0 * CF);
 }
 
-int fader_pos_to_midi_value(int fader_pos, int max_pos)
+int fader_pos_to_midi_value(int fader_pos)
 {
     // Convert fader position back to MIDI value
-    if (max_pos == 0) return 0;
-    return (int)((double)fader_pos / max_pos * 127.0);
+    int max_pos = 137 * CF;
+    if (fader_pos > max_pos) fader_pos = max_pos;
+    if (fader_pos < 0) fader_pos = 0;
+    return (int)((double)fader_pos / (double)max_pos * 127.0);
 }
