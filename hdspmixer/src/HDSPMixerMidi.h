@@ -51,7 +51,7 @@ private:
     bool learn_mode;
     
     // CC number to mapping (key = channel * 128 + cc)
-    std::map<int, MidiCCMapping> cc_mappings;
+    std::map<int, std::vector<MidiCCMapping>> cc_mappings;
     
     // Learning state
     HDSPMixerFader *learn_target_fader;

@@ -158,7 +158,6 @@ void HDSPMixerMidi::handle_midi_cc(int channel, int cc, int value)
     printf("MIDI CC received: channel=%d cc=%d value=%d learn_mode=%d\n", 
            channel, cc, value, learn_mode);
     
-    // Create key for lookup (channel * 128 + cc)
     int key = channel * 128 + cc;
     
     if (learn_mode && learn_target_fader) {
@@ -192,41 +191,46 @@ void HDSPMixerMidi::handle_midi_cc(int channel, int cc, int value)
         return;
     }
     
-    // Check if we have a mapping for this CC
+    // Check if we have mappings for this CC
     auto it = cc_mappings.find(key);
     if (it != cc_mappings.end()) {
-        MidiCCMapping &mapping = it->second;
+        std::vector<MidiCCMapping> &mappings = it->second;
         
-        // Resolve fader pointer if needed (was loaded from config)
-        if (mapping.fader == NULL && window) {
-            mapping.fader = resolve_fader(mapping.strip_index, 
-                                          mapping.dest_index, 
-                                          mapping.is_input);
-        }
-        
-        if (mapping.fader) {
-            // Convert MIDI value (0-127) to fader position
-            int fader_pos = midi_value_to_fader_pos(value);
-            
-            printf("Setting fader: strip=%d dest=%d pos=%d\n", 
-                   mapping.strip_index, mapping.dest_index, fader_pos);
-            
-            // Update the fader position on the main thread
-            Fl::lock();
-            mapping.fader->pos[mapping.dest_index] = fader_pos;
-            mapping.fader->redraw();
-            mapping.fader->sendGain();
-            
-            // Also update the mixer
-            if (window) {
-                window->setMixer(mapping.strip_index + 1, 
-                               mapping.is_input ? 0 : 1, 
-                               mapping.dest_index);
-                window->checkState();
+        // Process ALL faders mapped to this CC
+        for (MidiCCMapping &mapping : mappings) {
+            // Resolve fader pointer if needed
+            if (mapping.fader == NULL && window) {
+                mapping.fader = resolve_fader(mapping.strip_index, 
+                                              mapping.dest_index, 
+                                              mapping.is_input);
             }
-            Fl::unlock();
-            Fl::awake();
+            
+            if (mapping.fader) {
+                int fader_pos = midi_value_to_fader_pos(value);
+                
+                printf("Setting fader: strip=%d dest=%d pos=%d\n", 
+                       mapping.strip_index, mapping.dest_index, fader_pos);
+                
+                Fl::lock();
+                mapping.fader->pos[mapping.dest_index] = fader_pos;
+                mapping.fader->redraw();
+                mapping.fader->sendGain();
+                
+                if (window) {
+                    window->setMixer(mapping.strip_index + 1, 
+                                   mapping.is_input ? 0 : 1, 
+                                   mapping.dest_index);
+                }
+                Fl::unlock();
+            }
         }
+        
+        if (window) {
+            Fl::lock();
+            window->checkState();
+            Fl::unlock();
+        }
+        Fl::awake();
     }
 }
 
@@ -291,10 +295,11 @@ void HDSPMixerMidi::add_mapping(int cc_number, int channel, HDSPMixerFader *fade
     mapping.dest_index = dest_idx;
     mapping.is_input = is_input;
     
-    cc_mappings[key] = mapping;
+    // Add to vector instead of replacing
+    cc_mappings[key].push_back(mapping);
     
-    printf("MIDI mapping added: CC %d (ch %d) -> Strip %d, Dest %d\n",
-           cc_number, channel, strip_idx, dest_idx);
+    printf("MIDI mapping added: CC %d (ch %d) -> Strip %d, Dest %d (total mappings for this CC: %zu)\n",
+           cc_number, channel, strip_idx, dest_idx, cc_mappings[key].size());
 }
 
 void HDSPMixerMidi::remove_mapping(int cc_number, int channel)
@@ -314,15 +319,16 @@ void HDSPMixerMidi::clear_all_mappings()
 bool HDSPMixerMidi::has_mapping(int cc_number, int channel) const
 {
     int key = channel * 128 + cc_number;
-    return cc_mappings.find(key) != cc_mappings.end();
+    auto it = cc_mappings.find(key);
+    return (it != cc_mappings.end() && !it->second.empty());
 }
 
 MidiCCMapping HDSPMixerMidi::get_mapping(int cc_number, int channel) const
 {
     int key = channel * 128 + cc_number;
     auto it = cc_mappings.find(key);
-    if (it != cc_mappings.end()) {
-        return it->second;
+    if (it != cc_mappings.end() && !it->second.empty()) {
+        return it->second[0];  // Return first mapping
     }
     MidiCCMapping empty;
     empty.cc_number = -1;
@@ -343,12 +349,13 @@ void HDSPMixerMidi::save_mappings()
     file << "# Format: cc_number channel strip_index dest_index is_input\n";
     
     for (const auto &pair : cc_mappings) {
-        const MidiCCMapping &m = pair.second;
-        file << m.cc_number << " "
-             << m.channel << " "
-             << m.strip_index << " "
-             << m.dest_index << " "
-             << (m.is_input ? 1 : 0) << "\n";
+        for (const MidiCCMapping &m : pair.second) {
+            file << m.cc_number << " "
+                 << m.channel << " "
+                 << m.strip_index << " "
+                 << m.dest_index << " "
+                 << (m.is_input ? 1 : 0) << "\n";
+        }
     }
     
     file.close();
@@ -394,12 +401,17 @@ void HDSPMixerMidi::load_mappings()
         mapping.fader = NULL;  // Will be resolved on first use
         
         int key = channel * 128 + cc;
-        cc_mappings[key] = mapping;
+        cc_mappings[key].push_back(mapping);  // Use push_back, not assignment
     }
     
     file.close();
-    printf("Loaded %zu MIDI mappings from %s\n", cc_mappings.size(),
-           config_file_path.c_str());
+    
+    // Count total mappings
+    size_t total = 0;
+    for (const auto &pair : cc_mappings) {
+        total += pair.second.size();
+    }
+    printf("Loaded %zu MIDI mappings from %s\n", total, config_file_path.c_str());
 }
 
 std::vector<std::string> HDSPMixerMidi::get_midi_ports()
