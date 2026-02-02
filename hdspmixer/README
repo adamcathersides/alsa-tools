@@ -2,6 +2,30 @@
 
                                HDSPMixer
 
+EXTRA MIDI - Build instructions..
+
+```
+#Make sure you are in hdspmixer/src
+
+autoreconf -fi
+./configure
+make
+
+# To run
+src/hdspmixer
+
+
+#Find Midi devices and manually connect to HDSPMixer
+aconnect -l
+aconnect 16:32 128:0
+
+#In the mixer enable midi Options -->  Midi Controller --> Enable
+
+#Each channel has a little 'Learn button' at the bottom, click that to learn the midi CC number
+
+
+```
+
 
 HDSPMixer is the Linux equivalent of the Totalmix application from RME.
 It is a tool to control the advanced routing features of the RME Hammerfall DSP
