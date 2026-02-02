@@ -43,6 +43,10 @@ int main(int argc, char **argv)
     int card;
     int cards = 0;
 
+    // CRITICAL: Enable FLTK threading support BEFORE creating any widgets
+    // This is required for Fl::awake() to work from other threads (like MIDI)
+    Fl::lock();
+
     card = -1;
     printf("\nHDSPMixer %s - Copyright (C) 2003 Thomas Charbonnel <thomas@undata.org>\n", VERSION);
     printf("This program comes with ABSOLUTELY NO WARRANTY\n");
@@ -112,12 +116,14 @@ int main(int argc, char **argv)
         hdsp_cards[i] = NULL;
     }
 
-    printf("%d RME cards %s found.\n", cards, (cards > 1) ? "cards" : "card");
+    printf("%d RME %s found.\n", cards, (cards > 1) ? "cards" : "card");
     window = new HDSPMixerWindow(0, 0, hdsp_cards[0]->window_width,
             hdsp_cards[0]->window_height, "HDSPMixer", hdsp_cards[0],
             hdsp_cards[1], hdsp_cards[2]);
     Fl::visual(FL_DOUBLE|FL_INDEX);
     window->show(argc, argv);
 
+    // Run the FLTK event loop
+    // Fl::run() will automatically handle Fl::awake() calls from other threads
     return Fl::run();    
 }

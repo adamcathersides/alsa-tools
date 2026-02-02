@@ -46,6 +46,7 @@
 #include "HDSPMixerPresetData.h"
 #include "HDSPMixerPlaybacks.h"
 #include "HDSPMixerSetup.h"
+#include "HDSPMixerMidiSetup.h"
 #include "HDSPMixerAbout.h"
 #include "defines.h"
 
@@ -73,6 +74,7 @@ public:
     Fl_Menu_Bar *menubar;
     HDSPMixerMidi *midi_controller;
     Fl_Scroll *scroll;
+    HDSPMixerMidiSetup *midi_setup_dialog;
     HDSPMixerSetup *setup;
     HDSPMixerAbout *about;
     HDSPMixerPresetData *data[MAX_CARDS][3][NUM_PRESETS]; /* data[card number][mode(ss/ds/qs)][preset number] */
@@ -100,6 +102,7 @@ public:
     void stashPreset();
     void unstashPreset();
     void clear_all_mappings();
+    void show_midi_setup();
     virtual ~HDSPMixerWindow();
 };
 

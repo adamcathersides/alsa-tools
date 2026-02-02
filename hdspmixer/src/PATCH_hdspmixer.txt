@@ -1,0 +1,26 @@
+/*
+ * MINIMAL PATCH FOR hdspmixer.cxx
+ * 
+ * DO NOT REPLACE YOUR ENTIRE hdspmixer.cxx FILE!
+ * 
+ * Instead, just add ONE line to your existing hdspmixer.cxx:
+ * 
+ * Find this line in main():
+ *     int main(int argc, char **argv)
+ *     {
+ * 
+ * And add this line right after the opening brace:
+ *     Fl::lock();  // Initialize FLTK threading for MIDI
+ * 
+ * That's it! The rest of your hdspmixer.cxx should stay unchanged.
+ * 
+ * Example of what the beginning of main() should look like:
+ */
+
+int main(int argc, char **argv)
+{
+    // ADD THIS LINE - Initialize FLTK threading for MIDI callbacks
+    Fl::lock();
+    
+    // ... rest of your existing code stays exactly the same ...
+}

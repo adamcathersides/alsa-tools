@@ -1,0 +1,27 @@
+# Add these files to your Makefile.am
+#
+# In the hdspmixer_SOURCES line, add:
+#   HDSPMixerMidi.cxx
+#   HDSPMixerMidi.h
+#   HDSPMixerMidiButton.cxx
+#   HDSPMixerMidiButton.h
+#   HDSPMixerMidiSetup.cxx
+#   HDSPMixerMidiSetup.h
+#   HDSPMixerMidiSetupButton.cxx
+#   HDSPMixerMidiSetupButton.h
+#
+# Example of the full sources line (add to existing):
+#
+# hdspmixer_SOURCES = \
+#     ... existing files ...
+#     HDSPMixerMidi.cxx \
+#     HDSPMixerMidi.h \
+#     HDSPMixerMidiButton.cxx \
+#     HDSPMixerMidiButton.h \
+#     HDSPMixerMidiSetup.cxx \
+#     HDSPMixerMidiSetup.h \
+#     HDSPMixerMidiSetupButton.cxx \
+#     HDSPMixerMidiSetupButton.h
+
+# If using a simple Makefile instead of autotools, add to OBJS:
+#   HDSPMixerMidi.o HDSPMixerMidiButton.o HDSPMixerMidiSetup.o HDSPMixerMidiSetupButton.o

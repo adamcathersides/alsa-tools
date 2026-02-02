@@ -1,0 +1,78 @@
+/*
+ * MIDI Setup Integration for HDSPMixerWindow
+ * 
+ * Add these changes to your existing HDSPMixerWindow.h and HDSPMixerWindow.cxx files
+ */
+
+// ============================================================================
+// In HDSPMixerWindow.h - ADD these includes at the top:
+// ============================================================================
+
+#include "HDSPMixerMidiSetup.h"
+
+// ============================================================================
+// In HDSPMixerWindow.h - ADD this member variable in the class declaration:
+// (near where midi_controller is declared)
+// ============================================================================
+
+    HDSPMixerMidiSetup *midi_setup_dialog;
+
+// ============================================================================
+// In HDSPMixerWindow.h - ADD this public method declaration:
+// ============================================================================
+
+    void show_midi_setup();
+
+
+// ============================================================================
+// In HDSPMixerWindow.cxx - ADD this to the constructor, after midi_controller
+// is created and initialized:
+// ============================================================================
+
+    // Create MIDI setup dialog
+    midi_setup_dialog = new HDSPMixerMidiSetup(this);
+
+// ============================================================================
+// In HDSPMixerWindow.cxx - ADD this method implementation:
+// ============================================================================
+
+void HDSPMixerWindow::show_midi_setup()
+{
+    if (midi_setup_dialog) {
+        midi_setup_dialog->show();
+    }
+}
+
+// ============================================================================
+// In HDSPMixerWindow.cxx - If you have a menu, add a menu item like:
+// ============================================================================
+
+// In your menu definition, add something like:
+// { "MIDI Setup...", FL_CTRL + 'm', midi_setup_cb, this, 0 },
+
+// And the callback:
+static void midi_setup_cb(Fl_Widget *w, void *data)
+{
+    HDSPMixerWindow *win = static_cast<HDSPMixerWindow*>(data);
+    win->show_midi_setup();
+}
+
+// ============================================================================
+// ALTERNATIVE: If there's no menu, you can open it with a keyboard shortcut.
+// Add this to the handle() method of HDSPMixerWindow:
+// ============================================================================
+
+int HDSPMixerWindow::handle(int event)
+{
+    // ... existing code ...
+    
+    if (event == FL_KEYBOARD) {
+        // Ctrl+M opens MIDI setup
+        if (Fl::event_ctrl() && Fl::event_key() == 'm') {
+            show_midi_setup();
+            return 1;
+        }
+    }
+    
+    // ... rest of existing handle code ...
+}

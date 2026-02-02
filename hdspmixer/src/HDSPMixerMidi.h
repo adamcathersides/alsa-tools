@@ -24,8 +24,7 @@
 #include <string>
 #include <vector>
 #include <FL/Fl.H>
-
-#define MAX_MIDI_FADERS 128  // Maximum number of fader CC mappings
+#include "defines.h"
 
 // Forward declarations
 class HDSPMixerWindow;
@@ -34,7 +33,7 @@ class HDSPMixerFader;
 // MIDI CC mapping structure
 struct MidiCCMapping {
     int cc_number;           // MIDI CC number (0-127)
-    int channel;             // MIDI channel (0-15, -1 for omni)
+    int channel;             // MIDI channel (0-15)
     HDSPMixerFader *fader;   // Pointer to the fader (may be NULL if loaded from config)
     int strip_index;         // Strip index (0-based)
     int dest_index;          // Destination index
@@ -47,8 +46,8 @@ private:
     snd_seq_t *seq_handle;
     int seq_port;
     pthread_t midi_thread;
-    bool running;
-    bool learn_mode;
+    volatile bool running;
+    volatile bool learn_mode;
     
     // CC number to mapping (key = channel * 128 + cc)
     std::map<int, MidiCCMapping> cc_mappings;
@@ -59,17 +58,10 @@ private:
     int learn_target_dest;
     bool learn_target_is_input;
     
-    // Callback for learn completion
-    Fl_Awake_Handler learn_callback;
-    void *learn_callback_data;
-    
     // MIDI thread
     static void *midi_thread_func(void *arg);
     void process_midi_events();
     void handle_midi_cc(int channel, int cc, int value);
-    
-    // Resolve fader pointer from strip/dest indices
-    HDSPMixerFader* resolve_fader(int strip_idx, int dest_idx, bool is_input);
     
     // Configuration file handling
     std::string config_file_path;
@@ -77,12 +69,19 @@ private:
     void load_mappings();
     
 public:
+    // Callback for learn completion (public so static callback can access)
+    Fl_Awake_Handler learn_callback;
+    void *learn_callback_data;
+    
     HDSPMixerMidi(HDSPMixerWindow *win);
     ~HDSPMixerMidi();
     
     // Initialization
     bool initialize();
     void shutdown();
+    
+    // Get the window (for callbacks)
+    HDSPMixerWindow* get_window() const { return window; }
     
     // Learn mode control
     void set_learn_mode(bool enabled);

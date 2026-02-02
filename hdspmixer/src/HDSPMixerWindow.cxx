@@ -123,6 +123,11 @@ static void readregisters_cb(void *arg)
     Fl::add_timeout(0.03, readregisters_cb, w);
 }
 
+static void midi_setup_cb(Fl_Widget *w, void *data)
+{
+    HDSPMixerWindow *win = static_cast<HDSPMixerWindow*>(data);
+    win->show_midi_setup();
+}
 
 static void exit_cb(Fl_Widget *widget, void *arg)
 {
@@ -1012,6 +1017,7 @@ HDSPMixerWindow::HDSPMixerWindow(int x, int y, int w, int h, const char *label, 
     menubar->add("&View/Submix", 's', (Fl_Callback *)submix_cb, (void *)this, FL_MENU_TOGGLE|FL_MENU_VALUE);
     menubar->add("&Options/Level Meter Setup", 'm', (Fl_Callback *)setup_cb, (void *)this);
     menubar->add("&?/About", 0, (Fl_Callback *)about_cb, (void *)this);
+    menubar->add("&Midi Setup..", FL_CTRL+'m', (Fl_Callback *)midi_setup_cb, (void *)this);
 
     menubar->add("&Options/MIDI Controller/Enable", 'm',
                 (Fl_Callback *)midi_enable_cb, (void *)this,
@@ -1033,6 +1039,7 @@ HDSPMixerWindow::HDSPMixerWindow(int x, int y, int w, int h, const char *label, 
     about = new HDSPMixerAbout(360, 300, "About HDSPMixer", this);
     // Initialize MIDI controller
     midi_controller = new HDSPMixerMidi(this);
+    midi_setup_dialog = new HDSPMixerMidiSetup(this);
     if (!midi_controller->initialize()) {
         fprintf(stderr, "Warning: MIDI controller initialization failed\n");
         fprintf(stderr, "MIDI control will not be available\n");
@@ -1093,6 +1100,13 @@ HDSPMixerWindow::~HDSPMixerWindow()
 int HDSPMixerWindow::handle(int e) 
 {
     return Fl_Double_Window::handle(e);
+}
+
+void HDSPMixerWindow::show_midi_setup()
+{
+    if (midi_setup_dialog) {
+        midi_setup_dialog->show();
+    }
 }
 
 void HDSPMixerWindow::resize(int x, int y, int w, int h)
